@@ -7,6 +7,7 @@ struct RootView: View {
     @EnvironmentObject var nav: Nav
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var introDone = false
+    @State private var keyboardVisible = false
     @State private var pendingWidgetLink: WidgetLink?
 
     private var hasBackground: Bool {
@@ -23,10 +24,16 @@ struct RootView: View {
                 PagePager()
             }
 
-            addButton
-            DockView()
-            ZStack { toastLayer }
-                .animation(.easeInOut(duration: 0.25), value: store.toast?.id)
+            // Floating controls must not cover inline inputs when the keyboard reduces the viewport.
+            ZStack {
+                addButton
+                DockView()
+                ZStack { toastLayer }
+                    .animation(.easeInOut(duration: 0.25), value: store.toast?.id)
+            }
+            .opacity(keyboardVisible ? 0 : 1)
+            .allowsHitTesting(!keyboardVisible)
+            .accessibilityHidden(keyboardVisible)
             ZStack { sealLayer }
                 .allowsHitTesting(false)
 
@@ -35,6 +42,12 @@ struct RootView: View {
                     .transition(.opacity)
                     .zIndex(10)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+            keyboardVisible = false
         }
         .sheet(item: $nav.editor, onDismiss: openPendingWidget) { request in
             EditorSheet(request: request, existing: existingItem(for: request))
