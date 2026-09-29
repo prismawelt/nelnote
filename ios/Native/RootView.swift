@@ -24,16 +24,14 @@ struct RootView: View {
                 PagePager()
             }
 
-            // Floating controls must not cover inline inputs when the keyboard reduces the viewport.
-            ZStack {
+            // Remove floating controls while typing: off-screen toast transitions
+            // must not keep animating or cover the inline progress controls.
+            if !keyboardVisible {
                 addButton
                 DockView()
                 ZStack { toastLayer }
                     .animation(.easeInOut(duration: 0.25), value: store.toast?.id)
             }
-            .opacity(keyboardVisible ? 0 : 1)
-            .allowsHitTesting(!keyboardVisible)
-            .accessibilityHidden(keyboardVisible)
             ZStack { sealLayer }
                 .allowsHitTesting(false)
 

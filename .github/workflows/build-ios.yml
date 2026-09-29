@@ -67,7 +67,7 @@ jobs:
         run: |
           xcrun simctl boot "$NEL_SIMULATOR_ID" || true
           xcrun simctl bootstatus "$NEL_SIMULATOR_ID" -b
-          xcodebuild -quiet \
+          xcodebuild \
             -project NelNote.xcodeproj \
             -scheme NelNote \
             -configuration Debug \
