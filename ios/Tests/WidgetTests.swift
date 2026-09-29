@@ -3,7 +3,6 @@ import SwiftUI
 import WidgetKit
 @testable import NelNote
 
-@MainActor
 final class WidgetTests: XCTestCase {
     private typealias Category = NelNote.Category
     private var temporaryDirectory: URL!
@@ -124,6 +123,7 @@ final class WidgetTests: XCTestCase {
         XCTAssertNil(nav.editor)
     }
 
+    @MainActor
     func testRenderWidgetSizesForVisualReview() throws {
         for (family, width, height, name) in [
             (WidgetFamily.systemSmall, 158.0, 158.0, "widget-small"),
