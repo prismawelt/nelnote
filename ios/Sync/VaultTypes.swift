@@ -117,6 +117,7 @@ struct VaultTombstone: Codable, Equatable {
 struct VaultState: Codable, Equatable {
     var bookmark: Data? = nil
     var name: String? = nil
+    var location: String? = nil
     var links: [String: VaultLink] = [:]
     var deletions: [String: VaultDeletion] = [:]
     var tombstones: [String: VaultTombstone] = [:]
@@ -125,6 +126,15 @@ struct VaultState: Codable, Equatable {
     var protectMissing = true
     var lastSync: Date? = nil
     var lastResult: String? = nil
+
+    mutating func connect(bookmark: Data, name: String, location: String) {
+        // Renewing permission to the same vault must retain baselines, pending
+        // deletions and undo records. A different vault starts a safe first merge.
+        if self.location != location { self = VaultState() }
+        self.bookmark = bookmark
+        self.name = name
+        self.location = location
+    }
 }
 
 struct StoredLibrary: Codable {

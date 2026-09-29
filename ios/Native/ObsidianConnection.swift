@@ -75,7 +75,8 @@ final class ObsidianConnection {
                 switch result {
                 case .success(let bookmark):
                     self.stopPresenting()
-                    store.vaultState = VaultState(bookmark: bookmark, name: url.lastPathComponent)
+                    store.vaultState.connect(bookmark: bookmark, name: url.lastPathComponent,
+                                             location: url.standardizedFileURL.path)
                     store.vaultConflicts = []
                     if store.save(trackChanges: false) {
                         store.vaultMessage = "보관함을 연결했습니다."

@@ -365,6 +365,33 @@ final class VaultSyncTests: XCTestCase {
         XCTAssertTrue(plan.actions.contains { $0.path.hasSuffix(" (2).md") })
     }
 
+    func testPermissionRenewalRetainsPendingChangesAndAnotherVaultStartsSafely() throws {
+        var items = [item(.book, title: "삭제 대기"), item(.anime, title: "노트에서 삭제")]
+        var state = VaultState()
+        state.connect(bookmark: Data([1]), name: "note", location: root.path)
+        _ = try cycle(&items, &state)
+        let deleting = items[0], remoteDeleted = items[1]
+        let deletionPath = state.links[deleting.nelnoteID!]!.path
+        let remotePath = state.links[remoteDeleted.nelnoteID!]!.path
+        state.deletions[deleting.id] = VaultDeletion(item: deleting, at: 100)
+        items.removeFirst()
+        try FileManager.default.removeItem(at: root.appendingPathComponent(remotePath))
+
+        // An expired bookmark survives a relaunch before the user picks the same folder.
+        state = try JSONDecoder().decode(VaultState.self, from: JSONEncoder().encode(state))
+        state.connect(bookmark: Data([2]), name: "note", location: root.path)
+        XCTAssertNil(try cycle(&items, &state).error)
+        XCTAssertTrue(items.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(deletionPath).path))
+        XCTAssertNotNil(state.tombstones[deleting.nelnoteID!]?.trashPath)
+        XCTAssertNotNil(state.tombstones[remoteDeleted.nelnoteID!])
+
+        state.connect(bookmark: Data([3]), name: "note", location: root.path + "-different")
+        XCTAssertTrue(state.protectMissing)
+        XCTAssertTrue(state.tombstones.isEmpty)
+        XCTAssertTrue(state.links.isEmpty)
+    }
+
     func testUnknownLegacyTotalsArePreserved() throws {
         for total in ["-1", "\"\"", "null", ""] {
             let raw = "---\ntitle: 미정\nstatus: next_cours\nepisodes: " + total + "\n---\n본문"
