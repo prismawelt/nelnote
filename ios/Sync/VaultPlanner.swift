@@ -47,20 +47,20 @@ enum VaultPlanner {
         }
         var claimed = Set(notes.compactMap { boundItem($0)?.id })
         var matchedNotes = Set<String>()
-        var occupied = Set(notes.map(\.path))
+        var occupied = Set(notes.map { $0.path.lowercased() })
         let titleGroups = Dictionary(grouping: notes, by: { $0.category.rawValue + "\u{0}" + $0.fields.title })
         let appTitleGroups = Dictionary(grouping: items.filter { !claimed.contains($0.id) },
                                         by: { $0.cat.rawValue + "\u{0}" + $0.title })
 
         func availablePath(_ item: Item, preferred: String? = nil) -> String {
-            if let preferred, !preferred.isEmpty, !occupied.contains(preferred) { occupied.insert(preferred); return preferred }
+            if let preferred, !preferred.isEmpty, !occupied.contains(preferred.lowercased()) { occupied.insert(preferred.lowercased()); return preferred }
             let stem = item.cat.dbFolder + "/" + VaultNote.safeName(item.title)
             var path = stem + ".md"
             var suffix = 2
-            while occupied.contains(path) {
+            while occupied.contains(path.lowercased()) {
                 path = stem + " (\(suffix)).md"; suffix += 1
             }
-            occupied.insert(path)
+            occupied.insert(path.lowercased())
             return path
         }
 

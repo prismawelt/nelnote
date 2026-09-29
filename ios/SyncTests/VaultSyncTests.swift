@@ -357,4 +357,22 @@ final class VaultSyncTests: XCTestCase {
         }
     }
 
+    func testCaseInsensitiveFileNamesGetDistinctPaths() throws {
+        let first = item(.game, title: "Portal")
+        let second = item(.game, title: "portal")
+        let plan = try VaultFiles(root: root).prepare(items: [first, second], state: VaultState())
+        XCTAssertEqual(Set(plan.actions.map { $0.path.lowercased() }).count, 2)
+        XCTAssertTrue(plan.actions.contains { $0.path.hasSuffix(" (2).md") })
+    }
+
+    func testUnknownLegacyTotalsArePreserved() throws {
+        for total in ["-1", "\"\"", "null", ""] {
+            let raw = "---\ntitle: 미정\nstatus: next_cours\nepisodes: " + total + "\n---\n본문"
+            let note = try VaultNote(path: "test.md", category: .anime, raw: raw, modified: 0)
+            XCTAssertNil(note.fields.total)
+            let linked = try note.replacing(with: note.fields, id: UUID().uuidString.lowercased())
+            XCTAssertTrue(linked.contains("episodes: " + total + "\n"))
+        }
+    }
+
 }

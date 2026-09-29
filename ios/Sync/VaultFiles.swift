@@ -66,12 +66,16 @@ final class VaultFiles {
                     throw VaultError.permission
                 }
                 while let file = enumerator.nextObject() as? URL {
-                    let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey,
+                    let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey,
                                                                  .contentModificationDateKey, .fileSizeKey])
                     guard values.isSymbolicLink != true else {
                         throw VaultError.invalid("\(file.lastPathComponent): DB 폴더의 심볼릭 링크는 지원하지 않습니다.")
                     }
-                    guard file.pathExtension.lowercased() == "md", values.isRegularFile == true else { continue }
+                    guard file.pathExtension.lowercased() == "md" else { continue }
+                    if values.isDirectory == true { continue }
+                    guard values.isRegularFile == true else {
+                        throw VaultError.invalid("\(file.lastPathComponent): 파일 종류를 확인하지 못했습니다.")
+                    }
                     let indexNames = ["anime-db-index.md", "vnovel-db-index.md", "game-db-index.md", "book-db-index.md"]
                     if indexNames.contains(file.lastPathComponent.lowercased()) { continue }
                     guard let modified = values.contentModificationDate, let size = values.fileSize else {
@@ -157,7 +161,9 @@ final class VaultFiles {
                     let source = try url(note.path)
                     let trashPath = ".trash/nelnote/" + tombstone.id + "/" + UUID().uuidString + "/" + note.path
                     let destination = try url(trashPath)
-                    try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try coordinate(destination.deletingLastPathComponent(), writing: true) { folder in
+                        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+                    }
                     try moveToTrash(source: source, destination: destination, expected: note.raw)
                     tombstone.trashPath = trashPath
                     action.tombstone = tombstone
