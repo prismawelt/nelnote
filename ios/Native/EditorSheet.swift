@@ -34,7 +34,7 @@ struct EditorSheet: View {
             _title = State(initialValue: item.title)
             _status = State(initialValue: item.status)
             _unit = State(initialValue: item.unit ?? ItemUnit.page)
-            _curText = State(initialValue: String(item.cur))
+            _curText = State(initialValue: item.progressRecorded ? String(item.cur) : "")
             _totalText = State(initialValue: item.total.map { String($0) } ?? "")
             _memo = State(initialValue: item.memo)
         } else {
@@ -123,6 +123,7 @@ struct EditorSheet: View {
             .onChange(of: cat) { _ in
                 curText = ""
                 totalText = ""
+                if status == .nextCours && cat != .anime { status = .wait }
             }
         }
     }
@@ -149,11 +150,11 @@ struct EditorSheet: View {
         return VStack(alignment: .leading, spacing: 6) {
             label("상태")
             Picker("상태", selection: $status) {
-                ForEach([ItemStatus.wait, ItemStatus.play, ItemStatus.done], id: \.self) { s in
+                ForEach(cat.statuses, id: \.self) { s in
                     Text(s.label).tag(s)
                 }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             .accessibilityIdentifier("editor-status")
         }
     }
@@ -166,6 +167,11 @@ struct EditorSheet: View {
                 Text("권").tag(ItemUnit.vol)
             }
             .pickerStyle(.segmented)
+            .onChange(of: unit) { value in
+                curText = ""
+                let existing = request.itemID.flatMap { store.item(withID: $0) }
+                totalText = value == .page ? existing?.bookPages.map(String.init) ?? "" : ""
+            }
         }
     }
 
@@ -202,7 +208,7 @@ struct EditorSheet: View {
             label(u.curLabel)
             HStack(spacing: 4) {
                 stepButton("minus", delta: -1)
-                TextField("0", text: $curText)
+                TextField("미기록", text: $curText)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.center)
                     .font(.system(size: 18, weight: .bold))

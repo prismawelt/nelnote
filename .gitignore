@@ -8,3 +8,7 @@ ios/Payload/
 ios/*.ipa
 ios/*.xcresult/
 .DS_Store
+
+# Portable sync-engine test products
+ios/.build/
+ios/.swiftpm/

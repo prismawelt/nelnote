@@ -14,7 +14,7 @@ struct BookProgressInput: UIViewRepresentable {
         field.keyboardType = .numberPad
         field.textAlignment = .right
         field.font = .monospacedDigitSystemFont(ofSize: 16, weight: .semibold)
-        field.placeholder = "0"
+        field.placeholder = "미기록"
         field.delegate = context.coordinator
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         context.coordinator.field = field
@@ -32,7 +32,7 @@ struct BookProgressInput: UIViewRepresentable {
 
     func updateUIView(_ field: UITextField, context: Context) {
         context.coordinator.parent = self
-        if !field.isFirstResponder { field.text = String(item.cur) }
+        if !field.isFirstResponder { field.text = item.progressRecorded ? String(item.cur) : "" }
         field.textColor = UIColor(ink)
         field.tintColor = UIColor(ink)
         field.accessibilityLabel = item.effectiveUnit?.curLabel ?? "읽은 페이지"
@@ -65,7 +65,7 @@ struct BookProgressInput: UIViewRepresentable {
 
         func textFieldDidEndEditing(_ textField: UITextField) {
             guard var value = Int(textField.text ?? "") else {
-                textField.text = String(parent.item.cur)
+                textField.text = parent.item.progressRecorded ? String(parent.item.cur) : ""
                 return
             }
             if let total = parent.item.total, total > 0 { value = min(value, total) }

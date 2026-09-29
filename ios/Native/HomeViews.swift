@@ -14,7 +14,7 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(dateText)
                         .font(.system(size: 13))
@@ -85,7 +85,7 @@ struct HomeBlock: View {
         let playing = store.list(cat, ItemStatus.play)
         let waiting = store.countWaiting(cat)
         let glowOn = store.homeBg != nil
-        return VStack(alignment: .leading, spacing: 0) {
+        return LazyVStack(alignment: .leading, spacing: 0) {
             header(count: playing.count, glowOn: glowOn)
             if playing.isEmpty {
                 emptyRow(waiting: waiting, glowOn: glowOn)
@@ -218,7 +218,7 @@ struct CardView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(ink)
                 }
-                Text("\(dayCount(item.statusAt))일째")
+                Text(item.statusDateRecorded ? "\(dayCount(item.statusAt))일째" : "시작일 미기록")
                     .font(.system(size: 13))
                     .foregroundColor(Theme.ink2)
             }

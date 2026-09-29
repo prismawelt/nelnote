@@ -4,6 +4,7 @@ final class NavigationTests: XCTestCase {
     @MainActor
     func testRapidTabChangesSwipesAndWidgetDeepLink() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing"]
         app.launch()
         XCTAssertTrue(app.buttons["dock-4"].waitForExistence(timeout: 10))
         // Wait for the automatically dismissing intro before touching the dock.

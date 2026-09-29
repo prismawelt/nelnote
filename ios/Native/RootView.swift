@@ -209,6 +209,8 @@ struct TopBar: View {
                     .foregroundColor(Theme.ink2)
                     .frame(width: 44, height: 44)
             }
+            .accessibilityLabel("설정")
+            .accessibilityIdentifier("settings-open")
         }
         .padding(.leading, 18)
         .padding(.trailing, 6)

@@ -231,7 +231,7 @@ struct ProgressVisual: View {
     private var isPage: Bool { return item.effectiveUnit == ItemUnit.page }
 
     private var showStamps: Bool {
-        if item.effectiveUnit == nil { return false }
+        if item.effectiveUnit == nil || !item.progressRecorded { return false }
         if isPage { return false }
         if total > 30 { return false }
         if total == 0 && cur >= 30 { return false }
@@ -239,7 +239,7 @@ struct ProgressVisual: View {
     }
 
     private var showBar: Bool {
-        return item.effectiveUnit != nil && total > 0 && !showStamps
+        return item.progressRecorded && item.effectiveUnit != nil && total > 0 && !showStamps
     }
 
     var body: some View {

@@ -17,6 +17,8 @@ struct SettingsSheet: View {
                     .foregroundColor(Theme.ink)
                     .padding(.bottom, 16)
 
+                ObsidianSettingsSection()
+
                 sub("배경 사진")
                 Text("홈 화면과 분류 화면에 각각 다른 사진을 깔 수 있어요.")
                     .font(.system(size: 14))

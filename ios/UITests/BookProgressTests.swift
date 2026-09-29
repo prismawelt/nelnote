@@ -4,6 +4,7 @@ final class BookProgressTests: XCTestCase {
     @MainActor
     func testNumberPadEntryDoesNotOpenTheEditorAndFinishCommitsTheDraft() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing"]
         app.launch()
         let bookTab = app.buttons["dock-4"]
         XCTAssertTrue(bookTab.waitForExistence(timeout: 10))
@@ -15,7 +16,8 @@ final class BookProgressTests: XCTestCase {
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.tap()
         title.typeText("Book input test")
-        app.segmentedControls["editor-status"].buttons["진행중"].tap()
+        app.buttons["editor-status"].tap()
+        app.buttons["진행중"].tap()
         let total = app.textFields["editor-total"]
         total.tap()
         total.typeText("300")

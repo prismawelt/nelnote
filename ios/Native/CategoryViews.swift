@@ -6,39 +6,42 @@ struct CategoryView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var nav: Nav
     let cat: Category
-    @State private var doneOpen = false
+    @State private var expanded: Set<ItemStatus> = []
+    @State private var query = ""
 
     private var hasBackground: Bool { return store.catBg != nil }
 
     var body: some View {
-        let playing = store.list(cat, ItemStatus.play)
-        let waiting = store.list(cat, ItemStatus.wait)
-        let done = store.list(cat, ItemStatus.done)
-        let all = playing.count + waiting.count + done.count
+        let matches = store.items.filter {
+            $0.cat == cat && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query))
+        }
+        let groups = Dictionary(grouping: matches, by: \.status)
+        let playing = (groups[.play] ?? []).sorted { $0.statusAt > $1.statusAt }
         return ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                header(all: all, playing: playing.count, done: done.count)
-                if all == 0 {
-                    emptyState
+            LazyVStack(alignment: .leading, spacing: 0) {
+                header(all: matches.count, playing: playing.count, done: groups[.done]?.count ?? 0)
+                TextField("제목 검색", text: $query)
+                    .accessibilityIdentifier("category-search")
+                    .padding(12)
+                    .background(Theme.card)
+                    .cornerRadius(10)
+                    .padding(.top, 14)
+                if matches.isEmpty {
+                    if query.isEmpty { emptyState }
+                    else { note("검색 결과가 없어요.").padding(.top, 20) }
                 } else {
                     sectionTitle("진행중", playing.count)
-                    if playing.isEmpty {
-                        note(waiting.isEmpty ? "진행 중인 작품이 없어요." : "대기 목록에서 시작 버튼을 누르면 여기로 올라와요.")
-                    } else {
-                        ForEach(playing) { item in
-                            CardView(item: item, bordered: true)
-                        }
-                    }
-                    sectionTitle("대기중", waiting.count)
-                    if waiting.isEmpty {
-                        note("대기 중인 작품이 없어요.")
-                    } else {
-                        listPanel(waiting)
-                    }
-                    if !done.isEmpty {
-                        doneToggle(done.count)
-                        if doneOpen {
-                            listPanel(done)
+                    if playing.isEmpty { note("진행 중인 작품이 없어요.") }
+                    ForEach(playing) { item in CardView(item: item, bordered: true) }
+                    ForEach(cat.statuses.filter { $0 != .play }, id: \.self) { status in
+                        let rows = (groups[status] ?? []).sorted { $0.statusAt > $1.statusAt }
+                        if status == .wait {
+                            sectionTitle(status.label, rows.count)
+                            if rows.isEmpty { note("대기 중인 작품이 없어요.") }
+                            else { listPanel(rows) }
+                        } else if !rows.isEmpty {
+                            foldToggle(status, rows.count)
+                            if expanded.contains(status) || !query.isEmpty { listPanel(rows) }
                         }
                     }
                 }
@@ -128,23 +131,17 @@ struct CategoryView: View {
             .glow(hasBackground)
     }
 
-    private func doneToggle(_ count: Int) -> some View {
-        return Button(action: {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                doneOpen.toggle()
-            }
+    private func foldToggle(_ status: ItemStatus, _ count: Int) -> some View {
+        Button(action: {
+            if expanded.contains(status) { expanded.remove(status) }
+            else { expanded.insert(status) }
         }) {
             HStack(spacing: 6) {
-                Text("완료")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Theme.ink)
-                Text("\(count)")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Theme.ink3)
+                Text(status.label).font(.system(size: 14, weight: .bold)).foregroundColor(Theme.ink)
+                Text("\(count)").font(.system(size: 15, weight: .bold)).foregroundColor(Theme.ink3)
                 Spacer()
-                Image(systemName: doneOpen ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Theme.ink3)
+                Image(systemName: expanded.contains(status) || !query.isEmpty ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.ink3)
             }
             .padding(.horizontal, 2)
             .padding(.top, 24)
@@ -155,7 +152,7 @@ struct CategoryView: View {
     }
 
     private func listPanel(_ list: [Item]) -> some View {
-        return VStack(spacing: 0) {
+        return LazyVStack(spacing: 0) {
             ForEach(list) { item in
                 LineRow(item: item)
                 Divider()
@@ -200,11 +197,13 @@ struct LineRow: View {
 
     private var subText: String {
         if item.status == ItemStatus.done {
-            return shortDate(item.doneAt ?? item.statusAt) + " 완료"
+            return item.doneAt.map { shortDate($0) + " 완료" } ?? "완료일 미기록"
         }
         var parts: [String] = []
         if let unit = item.effectiveUnit {
-            if item.cur > 0 {
+            if !item.progressRecorded {
+                parts.append("진행 미기록")
+            } else if item.cur > 0 {
                 parts.append(item.progressText)
             } else if let total = item.total, total > 0 {
                 parts.append("전체 \(total)\(unit.gap)\(unit.short)")

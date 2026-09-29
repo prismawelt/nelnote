@@ -7,6 +7,7 @@ struct ToastInfo: Identifiable {
     let id = UUID()
     let message: String
     let undoItems: [Item]?
+    let afterItems: [Item]?
 }
 
 struct SealInfo: Identifiable {
@@ -46,6 +47,13 @@ final class Store: ObservableObject {
     @Published var catThumb: UIImage?
     @Published var homeDim: Double = 0.5
     @Published var catDim: Double = 0.5
+    @Published var vaultState = VaultState()
+    @Published var vaultBusy = false
+    @Published var vaultMessage = ""
+    @Published var vaultConflicts: [VaultConflict] = []
+    lazy var obsidian = ObsidianConnection(store: self)
+    private(set) var vaultRevision = 0
+    private var savedItems: [Item] = []
 
     private let base: URL
     private let dir: URL
@@ -75,6 +83,8 @@ final class Store: ObservableObject {
         loadBackground(BgSlot.home)
         loadBackground(BgSlot.cat)
         loadDims()
+        savedItems = items
+        if items.contains(where: { $0.nelnoteID == nil }) { _ = save(trackChanges: false) }
         syncWidget()
     }
 
@@ -115,19 +125,75 @@ final class Store: ObservableObject {
 
     private func loadItems() {
         guard let data = try? Data(contentsOf: itemsURL) else { return }
-        if let parsed = Store.parseItems(data) {
+        if let library = try? JSONDecoder().decode(StoredLibrary.self, from: data) {
+            items = library.items
+            vaultState = library.vault
+            vaultMessage = library.vault.lastResult ?? ""
+        } else if let parsed = Store.parseItems(data) {
             items = parsed
         }
     }
 
-    private func save() {
-        guard let data = try? JSONEncoder().encode(items) else { return }
-        do {
-            try data.write(to: itemsURL, options: .atomic)
-            syncWidget()
-        } catch {
-            Logger(subsystem: "com.nelnote.app", category: "storage").error("Could not save items: \(error.localizedDescription, privacy: .public)")
+    @discardableResult
+    func save(trackChanges: Bool = true) -> Bool {
+        let previous = Dictionary(uniqueKeysWithValues: savedItems.map { ($0.id, $0) })
+        let time = nowMs()
+        var prepared = items
+        var journal = vaultState
+        for index in prepared.indices {
+            if prepared[index].nelnoteID == nil { prepared[index].nelnoteID = UUID().uuidString.lowercased() }
+            guard trackChanges else { continue }
+            let old = previous[prepared[index].id].map(SyncFields.init)
+            let new = SyncFields(prepared[index])
+            if old?.title != new.title { prepared[index].fieldTimes["title"] = time }
+            if old?.status != new.status { prepared[index].fieldTimes["status"] = time }
+            if old?.total != new.total { prepared[index].fieldTimes["total"] = time }
+            if previous[prepared[index].id] == nil, let id = prepared[index].nelnoteID,
+               journal.deletions[prepared[index].id] != nil || journal.tombstones[id] != nil {
+                journal.deletions.removeValue(forKey: prepared[index].id)
+                journal.restores[id] = time
+            }
         }
+        if trackChanges, journal.bookmark != nil {
+            let remaining = Set(prepared.map(\.id))
+            for old in savedItems where !remaining.contains(old.id) {
+                journal.deletions[old.id] = VaultDeletion(item: old, at: time)
+                if let id = old.nelnoteID { journal.restores.removeValue(forKey: id) }
+            }
+        }
+        if items != prepared { items = prepared }
+        if vaultState != journal { vaultState = journal }
+        do {
+            let data = try JSONEncoder().encode(StoredLibrary(items: items, vault: vaultState))
+            try data.write(to: itemsURL, options: .atomic)
+            savedItems = items
+            vaultRevision += 1
+            syncWidget()
+            if trackChanges && vaultState.bookmark != nil { obsidian.schedule() }
+            return true
+        } catch {
+            vaultMessage = "앱 기록을 저장하지 못했습니다: " + error.localizedDescription
+            Logger(subsystem: "com.nelnote.app", category: "storage").error("Could not save items: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// Persist identities before the first write, so interruption cannot create
+    /// duplicate notes or make an uncommitted export look like a remote deletion.
+    func adoptVaultLinks(_ plan: VaultPlan) -> Bool {
+        var library = VaultLibrary(items: items, state: vaultState)
+        library.adopt(plan)
+        items = library.items
+        vaultState = library.state
+        return save(trackChanges: false)
+    }
+
+    func acceptVaultRun(_ run: VaultRun, snapshot: VaultState) -> Bool {
+        var library = VaultLibrary(items: items, state: vaultState)
+        library.accept(run, snapshot: snapshot)
+        items = library.items
+        vaultState = library.state
+        return save(trackChanges: false)
     }
 
     func syncWidget() {
@@ -192,7 +258,7 @@ final class Store: ObservableObject {
     // MARK: 알림
 
     func showToast(_ message: String, undo: [Item]?) {
-        let info = ToastInfo(message: message, undoItems: undo)
+        let info = ToastInfo(message: message, undoItems: undo, afterItems: undo == nil ? nil : items)
         toast = info
         toastWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -245,12 +311,12 @@ final class Store: ObservableObject {
     func increment(_ id: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         var item = items[index]
-        if item.status == ItemStatus.done { return }
+        if item.status != .play && item.status != .wait { return }
         let before = items
         let now = nowMs()
         let totalCount = item.total ?? 0
         if totalCount == 0 || item.cur < totalCount {
-            item.cur += 1
+            if item.cur < Int.max { item.cur += 1 }
         }
         if item.status == ItemStatus.wait {
             item.setStatus(ItemStatus.play, at: now)
@@ -260,6 +326,7 @@ final class Store: ObservableObject {
             item.cur = totalCount
             finished = item.setStatus(ItemStatus.done, at: now)
         }
+        item.progressRecorded = true
         item.updated = now
         items[index] = item
         save()
@@ -276,9 +343,10 @@ final class Store: ObservableObject {
         var item = items[index]
         var next = max(0, current)
         if let total = item.total, total > 0 { next = min(next, total) }
-        guard next != item.cur else { return }
+        guard next != item.cur || !item.progressRecorded else { return }
         let before = items
         item.cur = next
+        item.progressRecorded = true
         item.updated = nowMs()
         items[index] = item
         save()
@@ -291,7 +359,7 @@ final class Store: ObservableObject {
         let before = items
         let now = nowMs()
         if !item.setStatus(ItemStatus.done, at: now) { return }
-        if item.cat == .book, let total = item.total, total > 0 { item.cur = total }
+        if item.cat == .book, let total = item.total, total > 0 { item.cur = total; item.progressRecorded = true }
         item.updated = now
         items[index] = item
         save()
@@ -312,7 +380,16 @@ final class Store: ObservableObject {
     }
 
     func undo(_ snapshot: [Item]) {
-        items = snapshot
+        let after = toast?.afterItems ?? items
+        let original = Dictionary(uniqueKeysWithValues: snapshot.map { ($0.id, $0) })
+        let changed = Dictionary(uniqueKeysWithValues: after.map { ($0.id, $0) })
+        for id in Set(original.keys).union(changed.keys) where original[id] != changed[id] {
+            if let old = original[id] {
+                if let index = items.firstIndex(where: { $0.id == id }) {
+                    items[index] = old
+                } else { items.append(old) }
+            } else { items.removeAll { $0.id == id } }
+        }
         save()
         showToast("되돌렸어요", undo: nil)
     }
@@ -369,6 +446,10 @@ final class Store: ObservableObject {
             item.title = title
             item.memo = memo
             item.cur = cur
+            if !input.curText.trimmingCharacters(in: .whitespaces).isEmpty { item.progressRecorded = true }
+            if item.cat == .book && item.effectiveUnit != input.unit {
+                if input.unit == .vol { item.bookPages = item.total }
+            }
             item.total = total > 0 ? total : nil
             if item.cat == Category.book {
                 item.unit = input.unit
@@ -423,8 +504,17 @@ final class Store: ObservableObject {
             return nil
         }
         let before = items
+        obsidian.cancel()
         items = parsed
-        save()
+        vaultState.deletions = [:]
+        vaultState.protectMissing = true
+        for item in items {
+            if let id = item.nelnoteID, vaultState.tombstones[id] != nil {
+                vaultState.restores[id] = nowMs()
+            }
+        }
+        save(trackChanges: false)
+        if vaultState.bookmark != nil { obsidian.schedule() }
         showToast("작품 \(parsed.count)개를 불러왔어요", undo: before)
         return parsed.count
     }

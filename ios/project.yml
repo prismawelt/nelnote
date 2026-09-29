@@ -6,18 +6,24 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "2.2"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "2.3"
+    CURRENT_PROJECT_VERSION: "5"
     APP_GROUP_IDENTIFIER: group.com.nelnote.app
+packages:
+  Yams:
+    url: https://github.com/jpsim/Yams.git
+    exactVersion: 6.2.2
 targets:
   NelNote:
     type: application
     platform: iOS
     sources:
       - path: Native
+      - path: Sync
       - path: Shared
       - path: Assets.xcassets
     dependencies:
+      - package: Yams
       - target: NelNoteWidgets
         embed: true
     entitlements:
@@ -32,6 +38,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
+        LSSupportsOpeningDocumentsInPlace: true
         UILaunchScreen: {}
         NelNoteAppGroup: $(APP_GROUP_IDENTIFIER)
         CFBundleURLTypes:
@@ -54,7 +61,7 @@ targets:
     sources:
       - path: Widgets
       - path: Shared
-      - path: Native/Model.swift
+      - path: Sync/Model.swift
     entitlements:
       path: NelNoteWidgets.entitlements
       properties:
@@ -79,7 +86,9 @@ targets:
   NelNoteTests:
     type: bundle.unit-test
     platform: iOS
-    sources: Tests
+    sources:
+      - path: Tests
+      - path: SyncTests
     dependencies:
       - target: NelNote
     settings:

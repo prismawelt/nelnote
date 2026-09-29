@@ -128,12 +128,16 @@ enum ItemStatus: String, Codable, Hashable {
     case wait
     case play
     case done
+    case dropped
+    case nextCours
 
     var label: String {
         switch self {
         case .wait: return "대기중"
         case .play: return "진행중"
         case .done: return "완료"
+        case .dropped: return "중단"
+        case .nextCours: return "다음 시즌 대기"
         }
     }
 }
@@ -203,9 +207,16 @@ struct Item: Codable, Identifiable, Equatable {
     var statusAt: Int64
     var doneAt: Int64?
     var updated: Int64
+    var progressRecorded: Bool = true
+    var statusDateRecorded: Bool = true
+    var nelnoteID: String? = nil
+    var fieldTimes: [String: Int64] = [:]
+    // A book measured in volumes still has an independent Obsidian page count.
+    var bookPages: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, cat, title, status, cur, total, unit, memo, created, statusAt, doneAt, updated
+        case progressRecorded, statusDateRecorded, nelnoteID, fieldTimes, bookPages
     }
 
     /// 실제로 쓰는 진행 단위 (게임은 없음)
@@ -220,6 +231,7 @@ struct Item: Codable, Identifiable, Equatable {
 
     var progressText: String {
         guard let u = effectiveUnit else { return "" }
+        guard progressRecorded else { return "진행 미기록" }
         let totalCount = total ?? 0
         if totalCount > 0 {
             return "\(cur) / \(totalCount)\(u.gap)\(u.short)"
@@ -250,6 +262,7 @@ struct Item: Codable, Identifiable, Equatable {
         }
         status = next
         statusAt = time
+        statusDateRecorded = true
         doneAt = (next == ItemStatus.done) ? time : nil
         return true
     }
@@ -266,13 +279,10 @@ extension Item {
         title = ((try? c.decode(String.self, forKey: .title)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         status = (try? c.decode(ItemStatus.self, forKey: .status)) ?? ItemStatus.wait
 
-        var curValue = max(0, (try? c.decode(Int.self, forKey: .cur)) ?? 0)
+        let curValue = max(0, (try? c.decode(Int.self, forKey: .cur)) ?? 0)
         var totalValue: Int? = try? c.decodeIfPresent(Int.self, forKey: .total)
         if let t = totalValue, t <= 0 {
             totalValue = nil
-        }
-        if let t = totalValue, curValue > t {
-            curValue = t
         }
         cur = curValue
         total = totalValue
@@ -289,6 +299,13 @@ extension Item {
         statusAt = (try? c.decode(Int64.self, forKey: .statusAt)) ?? now
         doneAt = try? c.decodeIfPresent(Int64.self, forKey: .doneAt)
         updated = (try? c.decode(Int64.self, forKey: .updated)) ?? now
+        progressRecorded = (try? c.decode(Bool.self, forKey: .progressRecorded)) ?? true
+        statusDateRecorded = (try? c.decode(Bool.self, forKey: .statusDateRecorded)) ?? true
+        let decodedID = try? c.decodeIfPresent(String.self, forKey: .nelnoteID)
+        nelnoteID = decodedID.flatMap { UUID(uuidString: $0)?.uuidString.lowercased() }
+        fieldTimes = (try? c.decode([String: Int64].self, forKey: .fieldTimes)) ?? [:]
+        bookPages = try? c.decodeIfPresent(Int.self, forKey: .bookPages)
+        if cat != .anime && status == .nextCours { status = .wait }
     }
 }
 

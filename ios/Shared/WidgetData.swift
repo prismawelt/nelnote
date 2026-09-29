@@ -15,7 +15,7 @@ struct WidgetItem: Codable, Identifiable, Equatable {
         title = item.title
         memo = item.memo
         progressText = item.progressText
-        if item.effectiveUnit != nil, let total = item.total, total > 0 {
+        if item.progressRecorded, item.effectiveUnit != nil, let total = item.total, total > 0 {
             progress = min(1, max(0, Double(item.cur) / Double(total)))
         } else {
             progress = nil
