@@ -107,7 +107,7 @@ struct HomeBlock: View {
                     .padding(.horizontal, 11)
                     .padding(.top, 7)
                     .padding(.bottom, 5)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(cat.ink))
+                    .background(CategoryTabShape().fill(cat.ink))
             }
             Text("\(count)")
                 .font(.system(size: 15, weight: .bold))
@@ -123,7 +123,6 @@ struct HomeBlock: View {
             }
             .glow(glowOn)
         }
-        .padding(.bottom, 2)
         .overlay(Rectangle().fill(cat.ink).frame(height: 2), alignment: .bottom)
         .padding(.bottom, 10)
     }

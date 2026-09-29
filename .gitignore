@@ -1,0 +1,10 @@
+# XcodeGen output and local build products
+ios/*.xcodeproj/
+ios/Info.plist
+ios/Widgets/Info.plist
+ios/*.entitlements
+ios/build/
+ios/Payload/
+ios/*.ipa
+ios/*.xcresult/
+.DS_Store

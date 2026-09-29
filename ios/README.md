@@ -1,23 +1,45 @@
-# NEL NOTE 아이폰 앱 (네이티브 SwiftUI 버전)
+# NEL NOTE 아이폰 앱
 
-웹 화면을 감싼 방식이 아니라, 화면을 Swift(SwiftUI)로 직접 만든 아이폰 앱이에요.
-맥이 없어도 GitHub Actions 가 맥 서버에서 서명 없는 IPA를 만들어 줘요.
+iOS 16 이상용 SwiftUI 앱과 WidgetKit 홈 화면 위젯입니다. 기존 앱의 기록·배경·백업 형식을 유지합니다.
 
-## IPA 만들기
+## IPA 설치와 위젯
 
-1. 이 `ios` 폴더를 저장소의 기존 `ios` 폴더 위에 올려서 덮어쓰기 (Add file → Upload files)
-2. 저장소의 **Actions** 탭 → **Build iOS IPA** → **Run workflow**
-3. 5~10분 뒤 초록 체크가 뜨면 **Releases** 의 `NEL NOTE iOS (최신)`에서 `NelNote.ipa` 받기
-4. 아이폰에서 쓰시는 서명 앱(AltStore 등)으로 열어 설치
+1. 저장소의 **Releases**에서 최신 **NelNote.ipa**를 받습니다.
+2. AltStore 등으로 본인 계정 서명 후 설치합니다. **NelNoteWidgets 확장을 제거하지 마세요.**
+3. 앱을 한 번 열고 진행 중인 작품을 추가합니다.
+4. 홈 화면을 길게 누르고 위젯 추가에서 **NEL NOTE / 도장깨기**를 선택합니다.
 
-빨간 X 가 뜨면 실패한 단계를 눌러 나오는 오류 내용을 알려 주세요.
+소형은 작품 하나, 중형은 최대 두 작품, 대형은 최대 네 작품을 보여줍니다. GAME·ANIME·V-NOVEL·BOOK 순서로 묶고, 각 분류 안에서는 최근 수정한 작품부터 표시합니다. 대형은 각 분류의 작품을 하나씩 먼저 배정합니다. 표시되지 않은 작품도 분류별 개수와 전체 개수에는 포함됩니다.
 
-## 알아 두기
+위젯에서 작품을 누르면 앱의 해당 기록이 열립니다. 진행 단위나 전체 수량이 없는 작품은 임의의 진행률을 표시하지 않습니다. 앱에서 추가·수정·완료·삭제·불러오기·되돌리기를 하면 공유 데이터를 저장하고 위젯 갱신을 요청합니다. 실제 표시 시점은 iOS가 정합니다.
 
-- 아이폰 iOS 16 이상이 필요해요.
-- 예전 웹뷰 버전 IPA를 쓰고 계셨다면, 같은 앱 위에 덮어 설치할 때 기록과 배경 사진을 이어받아요.
-  안 옮겨졌다면 예전 앱에서 **백업 보내기** → 새 앱에서 **불러오기**를 하세요.
-- 웹 앱·안드로이드 앱의 백업 파일도 그대로 불러올 수 있어요.
-- 기록은 앱 안 파일에 저장돼요. 앱을 지우면 함께 지워지니 설정의 백업을 가끔 해 두세요.
-- 홈 화면 위젯은 없어요.
-- 예전 `ios/Sources`, `ios/Resources` 폴더는 이제 쓰이지 않아요. 지워도 되고 그냥 둬도 돼요.
+### 서명과 App Groups
+
+IPA는 Apple 배포용으로 서명되지 않았습니다. 재서명 도구가 권한을 읽을 수 있도록 임시 서명에 App Group 정보를 보존합니다. 앱과 위젯을 같은 팀으로 서명하고, 양쪽에 같은 App Group 권한이 있어야 데이터가 표시됩니다. AltStore가 그룹 이름을 바꾸면 ALTAppGroups에 기록된 그룹을 사용합니다. 위젯이 “앱을 한 번 열어 주세요”에 머무르면 설치한 앱의 확장 및 App Group 권한을 확인하세요.
+
+Xcode로 직접 빌드할 때는 project.yml의 APP_GROUP_IDENTIFIER를 본인 개발자 계정에 등록된 그룹으로 바꾸고 앱·위젯 모두에 같은 팀을 지정하세요. 기본 그룹은 group.com.nelnote.app입니다.
+
+## 빌드와 검증
+
+main에 iOS 코드를 푸시하거나 **Actions → Build iOS IPA → Run workflow**를 실행합니다. 워크플로는 다음을 수행합니다.
+
+- XcodeGen으로 앱·위젯·테스트 타깃 생성
+- iPhone 시뮬레이터에서 데이터 동기화, 작품 링크, 연속 탭·스와이프 테스트
+- 위젯 크기별 검토 이미지와 테스트 결과 보관
+- 실제 iPhone용 앱·위젯을 빌드하고, 확장·권한·URL 연결이 포함된 IPA 검증
+- 성공한 main 빌드를 Releases에 게시
+
+Mac에서 직접 검증하려면:
+
+    cd ios
+    xcodegen generate
+    xcodebuild -project NelNote.xcodeproj -scheme NelNote \
+      -destination 'platform=iOS Simulator,name=iPhone 17' test
+
+사용 가능한 시뮬레이터 이름에 맞춰 destination을 바꾸세요. GitHub Actions의 검증은 시뮬레이터와 패키지 수준이며, 설치 계정의 서명과 실제 기기의 위젯 동작은 기기에서 확인해야 합니다.
+
+## 기록 보존
+
+기록은 기존 Application Support/NelNoteNative/items.json에 계속 저장합니다. 위젯에는 읽기 전용 요약만 별도로 전달합니다. 기존 웹뷰 IPA의 기록과 배경 이전도 유지합니다. 앱 삭제 전에는 설정에서 백업하세요.
+
+ios/Sources와 ios/Resources는 이전 웹뷰 버전으로, 현재 빌드에는 포함하지 않습니다.

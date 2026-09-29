@@ -5,7 +5,9 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var nav: Nav
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var introDone = false
+    @State private var pendingWidgetLink: WidgetLink?
 
     private var hasBackground: Bool {
         let image = (nav.page == 2) ? store.homeBg : store.catBg
@@ -18,13 +20,7 @@ struct RootView: View {
 
             VStack(spacing: 0) {
                 TopBar(hasBackground: hasBackground)
-                TabView(selection: $nav.page) {
-                    ForEach(0..<5, id: \.self) { index in
-                        PageView(index: index)
-                            .tag(index)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                PagePager()
             }
 
             addButton
@@ -35,16 +31,38 @@ struct RootView: View {
                 .allowsHitTesting(false)
 
             if !introDone {
-                IntroView(onFinish: { introDone = true })
+                IntroView(onFinish: finishIntro)
+                    .transition(.opacity)
                     .zIndex(10)
             }
         }
-        .sheet(item: $nav.editor) { request in
+        .sheet(item: $nav.editor, onDismiss: openPendingWidget) { request in
             EditorSheet(request: request, existing: existingItem(for: request))
         }
-        .sheet(isPresented: $nav.showSettings) {
+        .sheet(isPresented: $nav.showSettings, onDismiss: openPendingWidget) {
             SettingsSheet()
         }
+        .onOpenURL { url in
+            guard let link = WidgetLink(url: url) else { return }
+            finishIntro()
+            pendingWidgetLink = link
+            if nav.editor != nil || nav.showSettings {
+                nav.editor = nil
+                nav.showSettings = false
+            } else {
+                openPendingWidget()
+            }
+        }
+    }
+
+    private func finishIntro() {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.28)) { introDone = true }
+    }
+
+    private func openPendingWidget() {
+        guard let link = pendingWidgetLink else { return }
+        pendingWidgetLink = nil
+        nav.open(link, items: store.items)
     }
 
     private func existingItem(for request: EditorRequest) -> Item? {
@@ -143,35 +161,34 @@ struct PageView: View {
 
 struct BackgroundView: View {
     @EnvironmentObject var store: Store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isHome: Bool
 
     var body: some View {
         ZStack {
-            Theme.paper.ignoresSafeArea()
-            content
+            Theme.paper
+            background(home: false).opacity(isHome ? 0 : 1)
+            background(home: true).opacity(isHome ? 1 : 0)
         }
-        .animation(.easeInOut(duration: 0.3), value: isHome)
+        .ignoresSafeArea()
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: isHome)
     }
 
-    @ViewBuilder private var content: some View {
-        let image = isHome ? store.homeBg : store.catBg
-        let dim = isHome ? store.homeDim : store.catDim
+    @ViewBuilder private func background(home: Bool) -> some View {
+        let image = home ? store.homeBg : store.catBg
+        let dim = home ? store.homeDim : store.catDim
         if let photo = image {
-            ZStack {
-                GeometryReader { geo in
-                    Image(uiImage: photo)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .clipped()
-                }
-                Theme.paper.opacity(dim)
+            GeometryReader { geo in
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+                    .overlay(Theme.paper.opacity(dim))
             }
-            .ignoresSafeArea()
         } else {
             GridShape(step: 22)
                 .stroke(Theme.ink.opacity(0.05), lineWidth: 1)
-                .ignoresSafeArea()
         }
     }
 }
@@ -221,6 +238,7 @@ struct DockView: View {
 
 struct DockButton: View {
     @EnvironmentObject var nav: Nav
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let index: Int
 
     private var isHome: Bool { return index == 2 }
@@ -256,7 +274,8 @@ struct DockButton: View {
         }
         .buttonStyle(DockPressStyle())
         .accessibilityLabel(title)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selected)
+        .accessibilityIdentifier("dock-\(index)")
+        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.9), value: selected)
     }
 
     private var glass: some View {

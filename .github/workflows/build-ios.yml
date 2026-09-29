@@ -2,33 +2,90 @@ name: Build iOS IPA
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/build-ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/build-ios.yml"
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: macos-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
     steps:
       - name: 코드 가져오기
         uses: actions/checkout@v4
 
-      - name: 화면 파일을 앱 안에 넣기
-        run: |
-          mkdir -p ios/Web
-          cp index.html nel.webp ios/Web/
-
       - name: XcodeGen 설치
-        run: brew install xcodegen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
 
-      - name: Xcode 프로젝트 만들기
+      - name: 앱과 위젯 프로젝트 만들기
         working-directory: ios
         run: xcodegen generate
 
-      - name: 빌드 (서명 없이)
+      - name: 시뮬레이터에서 데이터 동기화와 화면 전환 검증
         working-directory: ios
         run: |
-          xcodebuild \
+          set -euo pipefail
+          NEL_SIMULATOR_ID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          phones = [d for runtime, rows in devices.items() if "iOS" in runtime
+                    for d in rows if d["isAvailable"] and d["name"].startswith("iPhone")]
+          if not phones:
+              raise SystemExit("No iPhone simulator is available")
+          print(phones[0]["udid"])
+          ')
+          xcrun simctl boot "$NEL_SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$NEL_SIMULATOR_ID" -b
+          xcodebuild -quiet \
+            -project NelNote.xcodeproj \
+            -scheme NelNote \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$NEL_SIMULATOR_ID" \
+            -derivedDataPath build \
+            -resultBundlePath TestResults.xcresult \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: 테스트 화면 추출
+        if: always()
+        working-directory: ios
+        run: |
+          if [ -d TestResults.xcresult ]; then
+            mkdir -p build/previews
+            xcrun xcresulttool export attachments --path TestResults.xcresult --output-path build/previews
+          fi
+
+      - name: 테스트 결과 보관
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NelNote-test-results
+          path: |
+            ios/TestResults.xcresult
+            ios/build/previews
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: iPhone 앱과 위젯 빌드
+        working-directory: ios
+        run: |
+          xcodebuild -quiet \
             -project NelNote.xcodeproj \
             -scheme NelNote \
             -configuration Release \
@@ -40,28 +97,35 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build
 
-      - name: IPA 파일로 묶기
+      - name: 위젯 포함 IPA 만들기
         working-directory: ios
-        run: |
-          APP=$(find build/Build/Products -maxdepth 3 -name "NelNote.app" | head -n 1)
-          echo "앱 위치: $APP"
-          rm -rf Payload NelNote.ipa
-          mkdir Payload
-          cp -R "$APP" Payload/
-          zip -qry NelNote.ipa Payload
-          ls -la NelNote.ipa
+        run: bash scripts/package-ipa.sh
 
-      - name: 결과 파일 보관
+      - name: IPA 보관
         uses: actions/upload-artifact@v4
         with:
           name: NelNote-ipa
           path: ios/NelNote.ipa
+          if-no-files-found: error
 
-      - name: Releases 에 올리기
+      - name: Releases에 올리기
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete ios-latest --yes --cleanup-tag || true
-          gh release create ios-latest ios/NelNote.ipa \
-            --title "NEL NOTE iOS (최신)" \
-            --notes "서명 없는 IPA예요. AltStore 등 서명 앱에서 열어 설치하세요."
+          cat > "$RUNNER_TEMP/nelnote-release.md" <<'NOTES'
+          iOS 16 이상용 NEL NOTE와 도장깨기 위젯입니다.
+
+          - 진행 중인 작품·메모·진행률을 분류별로 표시하는 소형·중형·대형 위젯
+          - 위젯의 작품을 탭하면 해당 기록 열기
+          - 시작 캐릭터 중앙 정렬, 분류 제목의 아래 모서리, 화면 전환 수정
+
+          IPA는 설치할 때 AltStore 등으로 본인 계정 서명이 필요합니다.
+          위젯 확장을 유지하고 앱과 위젯에 같은 App Group 권한을 적용해 주세요.
+          설치 후 앱을 한 번 연 다음, 홈 화면의 위젯 추가에서 도장깨기를 선택하세요.
+          NOTES
+          gh release create "ios-build-${GITHUB_RUN_NUMBER}" ios/NelNote.ipa \
+            --target "$GITHUB_SHA" \
+            --title "NEL NOTE iOS 2.1 (빌드 ${GITHUB_RUN_NUMBER})" \
+            --notes-file "$RUNNER_TEMP/nelnote-release.md" \
+            --latest

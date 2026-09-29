@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import WidgetKit
+import OSLog
 
 struct ToastInfo: Identifiable {
     let id = UUID()
@@ -47,12 +49,19 @@ final class Store: ObservableObject {
 
     private let base: URL
     private let dir: URL
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+    private let widgetStore: WidgetSnapshotStore
+    private let reloadWidget: () -> Void
     private var toastWork: DispatchWorkItem?
     private var sealWork: DispatchWorkItem?
 
-    init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    init(baseURL: URL? = nil, widgetStore: WidgetSnapshotStore = WidgetSnapshotStore(),
+         defaults: UserDefaults = .standard,
+         reloadWidget: @escaping () -> Void = { WidgetCenter.shared.reloadTimelines(ofKind: WidgetSnapshotStore.kind) }) {
+        let support = baseURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        self.defaults = defaults
+        self.widgetStore = widgetStore
+        self.reloadWidget = reloadWidget
         self.base = support
         self.dir = support.appendingPathComponent("NelNoteNative", isDirectory: true)
         try? FileManager.default.createDirectory(at: self.dir, withIntermediateDirectories: true)
@@ -66,6 +75,7 @@ final class Store: ObservableObject {
         loadBackground(BgSlot.home)
         loadBackground(BgSlot.cat)
         loadDims()
+        syncWidget()
     }
 
     // MARK: 파일 위치
@@ -112,7 +122,22 @@ final class Store: ObservableObject {
 
     private func save() {
         guard let data = try? JSONEncoder().encode(items) else { return }
-        try? data.write(to: itemsURL, options: .atomic)
+        do {
+            try data.write(to: itemsURL, options: .atomic)
+            syncWidget()
+        } catch {
+            Logger(subsystem: "com.nelnote.app", category: "storage").error("Could not save items: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func syncWidget() {
+        do {
+            if try widgetStore.save(WidgetSnapshot(items: items)) {
+                reloadWidget()
+            }
+        } catch {
+            Logger(subsystem: "com.nelnote.app", category: "widget").error("Could not update widget: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     static func parseItems(_ data: Data) -> [Item]? {

@@ -53,6 +53,7 @@ struct CategoryView: View {
         let playPercent = all > 0 ? Int((Double(playing) / Double(all) * 100).rounded()) : 0
         return VStack(alignment: .leading, spacing: 0) {
             Text(cat.label)
+                .accessibilityIdentifier("category-\(cat.rawValue)")
                 .font(.system(size: 42, weight: .heavy))
                 .foregroundColor(cat.ink)
                 .glow(hasBackground)

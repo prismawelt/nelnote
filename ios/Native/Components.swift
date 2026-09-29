@@ -18,8 +18,23 @@ final class Nav: ObservableObject {
     @Published var showSettings = false
 
     func go(_ index: Int) {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            page = index
+        guard (0..<5).contains(index), page != index else { return }
+        page = index
+    }
+
+    func open(_ link: WidgetLink, items: [Item]) {
+        switch link {
+        case .home:
+            page = 2
+            editor = nil
+        case .item(let id):
+            guard let item = items.first(where: { $0.id == id }) else {
+                page = 2
+                editor = nil
+                return
+            }
+            page = item.cat.pageIndex
+            editor = EditorRequest(itemID: item.id, category: item.cat, status: item.status)
         }
     }
 }
@@ -57,21 +72,24 @@ struct CharacterBadge: View {
     var imageOffsetY: CGFloat = 0
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            LinearGradient(
+        Circle()
+            .fill(LinearGradient(
                 colors: [Color(UIColor(hex: 0xDDEBF8)), Color(UIColor(hex: 0xAACAEA))],
                 startPoint: .top,
                 endPoint: .bottom
-            )
-            GridShape(step: size * 0.15)
-                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-            Image("nel")
-                .resizable()
-                .frame(width: size * 1.5, height: size * 1.5)
-                .offset(x: -size * 0.25, y: -size * 0.25 + imageOffsetY)
-        }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
+            ))
+            .frame(width: size, height: size)
+            .overlay(GridShape(step: size * 0.15).stroke(Color.white.opacity(0.3), lineWidth: 1))
+            .overlay {
+                // An overlay cannot enlarge the badge's layout frame. Its center
+                // stays fixed while the character peeks up inside the circle.
+                Image("nel")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size * 1.5, height: size * 1.5)
+                    .offset(y: imageOffsetY)
+            }
+            .clipShape(Circle())
     }
 }
 
@@ -261,5 +279,13 @@ struct ProgressVisual: View {
         }
         .frame(height: 6)
         .padding(.top, 12)
+    }
+}
+
+/// iOS 16-compatible tab shape: the lower corners meet the section rule squarely.
+struct CategoryTabShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path(UIBezierPath(roundedRect: rect, byRoundingCorners: [.topLeft, .topRight],
+                          cornerRadii: CGSize(width: 7, height: 7)).cgPath)
     }
 }

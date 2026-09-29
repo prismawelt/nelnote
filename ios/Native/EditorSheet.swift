@@ -80,14 +80,15 @@ struct EditorSheet: View {
             .padding(18)
         }
         .background(Theme.paper.ignoresSafeArea())
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+        .task {
+            do {
+                try await Task.sleep(nanoseconds: 400_000_000)
                 if request.focusCur {
                     focus = Field.cur
                 } else if isAdd {
                     focus = Field.title
                 }
-            }
+            } catch { }
         }
     }
 

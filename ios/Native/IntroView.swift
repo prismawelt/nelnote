@@ -1,82 +1,75 @@
 import SwiftUI
 
-// MARK: - 인트로: 캐릭터가 동그라미 안에서 쏙 올라오고, 로고가 한 획씩 그려진 뒤 O에 빨간 점이 찍힌다
+// MARK: - 캐릭터와 로고를 화면 중앙에 배치한 시작 애니메이션
 
 struct IntroView: View {
     let onFinish: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var badgeIn = false
     @State private var peek = false
     @State private var drawn = false
     @State private var dot = false
     @State private var hop = false
-    @State private var fade = false
     @State private var finished = false
 
     private let size: CGFloat = 156
 
     private var characterOffset: CGFloat {
-        var y: CGFloat = peek ? 0 : size * 1.5 * 0.62
-        if hop {
-            y -= size * 0.05
-        }
-        return y
+        (peek ? 0 : size * 0.93) - (hop ? size * 0.04 : 0)
     }
 
     var body: some View {
         ZStack {
-            Theme.paper.ignoresSafeArea()
+            Theme.paper
             VStack(spacing: 28) {
-                CharacterBadge(size: size, imageOffsetY: characterOffset)
+                CharacterBadge(size: size, imageOffsetY: reduceMotion ? 0 : characterOffset)
                     .shadow(color: Color.blue.opacity(0.25), radius: 16, x: 0, y: 10)
-                    .scaleEffect(badgeIn ? 1 : 0.35)
-                    .opacity(badgeIn ? 1 : 0)
-                Wordmark(height: 32, drawn: drawn, dotShown: dot, animated: true)
+                    .scaleEffect(reduceMotion || badgeIn ? 1 : 0.72)
+                    .opacity(reduceMotion || badgeIn ? 1 : 0)
+                Wordmark(height: 32, drawn: drawn, dotShown: dot, animated: !reduceMotion)
             }
             .offset(y: -30)
         }
-        .opacity(fade ? 0 : 1)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
         .contentShape(Rectangle())
         .onTapGesture { finish() }
-        .onAppear { play() }
+        .accessibilityLabel("NEL NOTE")
+        .accessibilityHint("탭하여 시작 화면 건너뛰기")
+        .task { await play() }
     }
 
-    private func play() {
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.6)) {
-            badgeIn = true
-        }
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.16)) {
-            peek = true
-        }
-        drawn = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.5)) {
+    @MainActor
+    private func play() async {
+        do {
+            if reduceMotion {
+                badgeIn = true
+                peek = true
+                drawn = true
                 dot = true
+                try await Task.sleep(nanoseconds: 350_000_000)
+            } else {
+                withAnimation(.spring(response: 0.48, dampingFraction: 0.82)) { badgeIn = true }
+                try await Task.sleep(nanoseconds: 160_000_000)
+                withAnimation(.spring(response: 0.62, dampingFraction: 0.86)) { peek = true }
+                drawn = true
+                try await Task.sleep(nanoseconds: 1_080_000_000)
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { dot = true }
+                withAnimation(.easeInOut(duration: 0.18)) { hop = true }
+                try await Task.sleep(nanoseconds: 180_000_000)
+                withAnimation(.easeInOut(duration: 0.22)) { hop = false }
+                try await Task.sleep(nanoseconds: 440_000_000)
             }
-            withAnimation(.easeInOut(duration: 0.2)) {
-                hop = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    hop = false
-                }
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) {
             finish()
+        } catch {
+            // Leaving or skipping the intro cancels every pending animation.
         }
     }
 
     private func finish() {
-        if finished {
-            return
-        }
+        guard !finished else { return }
         finished = true
-        withAnimation(.easeOut(duration: 0.35)) {
-            fade = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            onFinish()
-        }
+        onFinish()
     }
 }
