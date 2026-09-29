@@ -124,16 +124,15 @@ final class WidgetTests: XCTestCase {
     }
 
     @MainActor
-    func testRenderWidgetSizesForVisualReview() throws {
+    func testRenderScreensForVisualReview() throws {
         for (family, width, height, name) in [
             (WidgetFamily.systemSmall, 158.0, 158.0, "widget-small"),
             (.systemMedium, 338.0, 158.0, "widget-medium"),
             (.systemLarge, 338.0, 354.0, "widget-large")
         ] {
             let renderer = ImageRenderer(content:
-                ProgressWidgetView(entry: ProgressEntry(date: Date(), snapshot: .preview))
-                    .environment(\.widgetFamily, family)
-                    .padding(14)
+                ProgressWidgetContent(entry: ProgressEntry(date: Date(), snapshot: .preview), family: family)
+                    .padding(16)
                     .frame(width: width, height: height)
                     .background(Color(red: 0.115, green: 0.13, blue: 0.19))
                     .clipShape(RoundedRectangle(cornerRadius: 22))
@@ -145,5 +144,12 @@ final class WidgetTests: XCTestCase {
             attachment.lifetime = .keepAlways
             add(attachment)
         }
+        let badge = ImageRenderer(content: CharacterBadge(size: 156)
+            .frame(width: 220, height: 220).background(Theme.paper))
+        badge.scale = 2
+        let badgeAttachment = XCTAttachment(image: try XCTUnwrap(badge.uiImage))
+        badgeAttachment.name = "character-centered"
+        badgeAttachment.lifetime = .keepAlways
+        add(badgeAttachment)
     }
 }

@@ -1,6 +1,7 @@
 import XCTest
 
 final class NavigationTests: XCTestCase {
+    @MainActor
     func testRapidTabChangesSwipesAndWidgetDeepLink() throws {
         let app = XCUIApplication()
         app.launch()

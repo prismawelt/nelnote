@@ -27,6 +27,18 @@ struct ProgressWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: ProgressEntry
 
+    var body: some View {
+        ProgressWidgetContent(entry: entry, family: family)
+            .modifier(WidgetBackground())
+    }
+}
+
+/// The exact widget content can also be rendered for visual review without
+/// trying to override WidgetKit's read-only environment values.
+struct ProgressWidgetContent: View {
+    let entry: ProgressEntry
+    let family: WidgetFamily
+
     private var rowLimit: Int {
         switch family {
         case .systemSmall: return 1
@@ -46,7 +58,6 @@ struct ProgressWidgetView: View {
     var body: some View {
         content
             .widgetURL(destination)
-            .modifier(WidgetBackground())
     }
 
     private var content: some View {
