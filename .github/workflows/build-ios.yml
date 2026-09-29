@@ -36,8 +36,7 @@ jobs:
         working-directory: ios
         run: xcodegen generate
 
-      - name: 시뮬레이터에서 데이터 동기화와 화면 전환 검증
-        working-directory: ios
+      - name: iPhone 시뮬레이터 선택
         run: |
           set -euo pipefail
           NEL_SIMULATOR_ID=$(xcrun simctl list devices available --json | python3 -c '
@@ -49,6 +48,23 @@ jobs:
               raise SystemExit("No iPhone simulator is available")
           print(phones[0]["udid"])
           ')
+          echo "NEL_SIMULATOR_ID=$NEL_SIMULATOR_ID" >> "$GITHUB_ENV"
+
+      - name: 시뮬레이터용 앱·위젯·테스트 컴파일
+        working-directory: ios
+        run: |
+          xcodebuild -quiet \
+            -project NelNote.xcodeproj \
+            -scheme NelNote \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$NEL_SIMULATOR_ID" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: 시뮬레이터에서 데이터 동기화와 화면 전환 검증
+        working-directory: ios
+        run: |
           xcrun simctl boot "$NEL_SIMULATOR_ID" || true
           xcrun simctl bootstatus "$NEL_SIMULATOR_ID" -b
           xcodebuild -quiet \
@@ -60,7 +76,7 @@ jobs:
             -resultBundlePath TestResults.xcresult \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO \
-            test
+            test-without-building
 
       - name: 테스트 화면 추출
         if: always()

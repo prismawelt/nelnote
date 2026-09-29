@@ -5,6 +5,7 @@ import WidgetKit
 
 @MainActor
 final class WidgetTests: XCTestCase {
+    private typealias Category = NelNote.Category
     private var temporaryDirectory: URL!
     private var shared: WidgetSnapshotStore!
     private var store: Store!
@@ -33,7 +34,7 @@ final class WidgetTests: XCTestCase {
     private func item(_ id: String, cat: Category = .anime, status: ItemStatus = .play,
                       cur: Int = 2, total: Int? = 12, updated: Int64 = 1) -> Item {
         Item(id: id, cat: cat, title: "작품 " + id, status: status, cur: cur, total: total,
-             unit: nil, memo: "", created: 0, statusAt: 0, doneAt: nil, updated: updated)
+             unit: cat == .book ? .page : nil, memo: "", created: 0, statusAt: 0, doneAt: nil, updated: updated)
     }
 
     func testOnlyPlayingItemsAreSharedAndEveryCategoryGetsARow() {
