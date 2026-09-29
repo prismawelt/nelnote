@@ -233,6 +233,7 @@ final class Store: ObservableObject {
         case .some(.ep): return "\(name) \(item.cur)화까지 봤어요"
         case .some(.route): return "\(name) 루트 \(item.cur)개 클리어"
         case .some(.vol): return "\(name) \(item.cur)권까지 읽었어요"
+        case .some(.page): return "\(name) \(item.cur)페이지까지 읽었어요"
         default: return "저장했어요"
         }
     }
@@ -268,12 +269,29 @@ final class Store: ObservableObject {
         }
     }
 
+    /// 페이지 입력은 진행률만 저장하고, 완독 여부는 사용자가 직접 정한다.
+    func updateBookProgress(_ id: String, current: Int) {
+        guard let index = items.firstIndex(where: { $0.id == id }),
+              items[index].cat == .book, items[index].status == .play else { return }
+        var item = items[index]
+        var next = max(0, current)
+        if let total = item.total, total > 0 { next = min(next, total) }
+        guard next != item.cur else { return }
+        let before = items
+        item.cur = next
+        item.updated = nowMs()
+        items[index] = item
+        save()
+        showToast(incMessage(item), undo: before)
+    }
+
     func finish(_ id: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         var item = items[index]
         let before = items
         let now = nowMs()
         if !item.setStatus(ItemStatus.done, at: now) { return }
+        if item.cat == .book, let total = item.total, total > 0 { item.cur = total }
         item.updated = now
         items[index] = item
         save()
@@ -344,8 +362,8 @@ final class Store: ObservableObject {
         if let existingID = input.existingID, let index = items.firstIndex(where: { $0.id == existingID }) {
             var item = items[index]
             var nextStatus = input.status
-            // 진행중인 작품을 끝까지 기록하면 +1 버튼처럼 바로 완료 처리
-            if nextStatus == ItemStatus.play && total > 0 && cur >= total && item.cur < total {
+            // 책은 페이지 입력과 완독 처리를 분리한다.
+            if item.cat != .book && nextStatus == ItemStatus.play && total > 0 && cur >= total && item.cur < total {
                 nextStatus = ItemStatus.done
             }
             item.title = title

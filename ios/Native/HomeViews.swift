@@ -166,37 +166,34 @@ struct CardView: View {
     var body: some View {
         let ink = item.cat.ink
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.title)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(Theme.ink)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    HStack(spacing: 10) {
-                        if !item.progressText.isEmpty {
-                            Text(item.progressText)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(ink)
-                        }
-                        Text("\(dayCount(item.statusAt))일째")
-                            .font(.system(size: 13))
-                            .foregroundColor(Theme.ink2)
-                    }
+            HStack(alignment: .top, spacing: 8) {
+                Button(action: openEditor) {
+                    headline(ink: ink)
                 }
-                Spacer(minLength: 6)
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if item.cat == .book && item.status == .play {
+                    bookProgress(ink: ink)
+                }
                 if let quick = item.quick {
                     quickButton(quick, ink: ink)
                 }
             }
-            ProgressVisual(item: item)
-            if !item.memo.isEmpty {
-                Text(item.memo)
-                    .font(.system(size: 13))
-                    .foregroundColor(Theme.ink2)
-                    .lineLimit(1)
-                    .padding(.top, 8)
+            Button(action: openEditor) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ProgressVisual(item: item)
+                    if !item.memo.isEmpty {
+                        Text(item.memo)
+                            .font(.system(size: 13))
+                            .foregroundColor(Theme.ink2)
+                            .lineLimit(1)
+                            .padding(.top, 8)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         }
         .padding(bordered ? 11 : 12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -205,15 +202,50 @@ struct CardView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(bordered ? ink : Theme.rule, lineWidth: bordered ? 2 : 1)
         )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            nav.editor = EditorRequest(itemID: item.id, category: item.cat, status: item.status)
-        }
         .padding(.bottom, 8)
     }
 
+    private func headline(ink: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(item.title)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(Theme.ink)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            HStack(spacing: 8) {
+                if !item.progressText.isEmpty {
+                    Text(item.progressText)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(ink)
+                }
+                Text("\(dayCount(item.statusAt))일째")
+                    .font(.system(size: 13))
+                    .foregroundColor(Theme.ink2)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private func bookProgress(ink: Color) -> some View {
+        HStack(spacing: 3) {
+            BookProgressInput(item: item, ink: ink) { value in
+                store.updateBookProgress(item.id, current: value)
+            }
+            .frame(width: 50, height: 48)
+            Text(item.effectiveUnit?.short ?? "p")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.ink2)
+        }
+        .padding(.horizontal, 8)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.paper))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(ink.opacity(0.45), lineWidth: 1))
+    }
+
     private func quickButton(_ quick: QuickInfo, ink: Color) -> some View {
-        return Button(action: { perform(quick.action) }) {
+        Button(action: { perform(quick.action) }) {
             Text(quick.label)
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(ink)
@@ -222,9 +254,20 @@ struct CardView: View {
                 .overlay(Capsule().stroke(ink, lineWidth: 2))
         }
         .buttonStyle(DockPressStyle())
+        .accessibilityIdentifier("item-quick-\(item.id)")
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func openEditor() {
+        dismissKeyboard()
+        nav.editor = EditorRequest(itemID: item.id, category: item.cat, status: item.status)
     }
 
     private func perform(_ action: QuickAction) {
+        dismissKeyboard()
         switch action {
         case .finish:
             store.finish(item.id)

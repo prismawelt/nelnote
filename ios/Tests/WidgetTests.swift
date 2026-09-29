@@ -112,6 +112,43 @@ final class WidgetTests: XCTestCase {
         XCTAssertEqual(shared.load(), WidgetSnapshot(items: reloaded.items))
     }
 
+    func testBookProgressPersistsAndOnlyTheFinishButtonCompletesIt() throws {
+        let source = [item("book", cat: .book), item("unknown", cat: .book, total: nil)]
+        let json = String(data: try JSONEncoder().encode(source), encoding: .utf8)!
+        XCTAssertEqual(store.importBackup(json), 2)
+
+        store.updateBookProgress("book", current: 6)
+        XCTAssertEqual(shared.load()?.items.first(where: { $0.id == "book" })?.progress, 0.5)
+        let reloaded = Store(baseURL: temporaryDirectory, widgetStore: shared, defaults: defaults, reloadWidget: {})
+        XCTAssertEqual(reloaded.item(withID: "book")?.cur, 6)
+
+        store.updateBookProgress("book", current: 999)
+        XCTAssertEqual(store.item(withID: "book")?.cur, 12)
+        XCTAssertEqual(store.item(withID: "book")?.status, .play)
+        XCTAssertEqual(shared.load()?.totalCount, 2)
+        store.updateBookProgress("book", current: -1)
+        XCTAssertEqual(store.item(withID: "book")?.cur, 0)
+        store.saveEditor(EditorInput(existingID: "book", cat: .book, title: "책", status: .play,
+                                     unit: .page, curText: "12", totalText: "12", memo: ""))
+        XCTAssertEqual(store.item(withID: "book")?.status, .play)
+
+        store.updateBookProgress("book", current: 5)
+        store.finish("book")
+        XCTAssertEqual(store.item(withID: "book")?.status, .done)
+        XCTAssertEqual(store.item(withID: "book")?.cur, 12)
+        XCTAssertEqual(shared.load()?.items.map(\.id), ["unknown"])
+        store.updateBookProgress("book", current: 2)
+        XCTAssertEqual(store.item(withID: "book")?.cur, 12)
+        store.undo(try XCTUnwrap(store.toast?.undoItems))
+        XCTAssertEqual(store.item(withID: "book")?.status, .play)
+        XCTAssertEqual(store.item(withID: "book")?.cur, 5)
+
+        store.updateBookProgress("unknown", current: 1234)
+        store.finish("unknown")
+        XCTAssertEqual(store.item(withID: "unknown")?.cur, 1234)
+        XCTAssertEqual(store.item(withID: "unknown")?.status, .done)
+    }
+
     func testWidgetTapOpensExistingRecordAndDeletedRecordFallsBackHome() {
         let nav = Nav()
         let anime = item("anime")

@@ -131,6 +131,7 @@ struct EditorSheet: View {
         return VStack(alignment: .leading, spacing: 6) {
             label("제목")
             box(cat.titlePlaceholder, text: $title, error: titleError)
+                .accessibilityIdentifier("editor-title")
                 .focused($focus, equals: Field.title)
                 .submitLabel(.done)
                 .onChange(of: title) { _ in
@@ -153,6 +154,7 @@ struct EditorSheet: View {
                 }
             }
             .pickerStyle(.segmented)
+            .accessibilityIdentifier("editor-status")
         }
     }
 
@@ -224,6 +226,7 @@ struct EditorSheet: View {
         return VStack(alignment: .leading, spacing: 6) {
             label(u.totalLabel)
             TextField("비워도 돼요", text: $totalText)
+                .accessibilityIdentifier("editor-total")
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)
                 .font(.system(size: 18, weight: .bold))
@@ -288,6 +291,7 @@ struct EditorSheet: View {
                     .frame(height: 50)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(cat.ink))
             }
+            .accessibilityIdentifier("editor-save")
         }
         .padding(.top, 6)
     }

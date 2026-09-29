@@ -237,8 +237,8 @@ struct Item: Codable, Identifiable, Equatable {
         if cat == Category.game {
             return QuickInfo(action: .finish, label: "완료")
         }
-        if effectiveUnit == ItemUnit.page {
-            return QuickInfo(action: .log, label: "기록")
+        if cat == Category.book {
+            return QuickInfo(action: .finish, label: "완독")
         }
         return QuickInfo(action: .inc, label: "+1")
     }

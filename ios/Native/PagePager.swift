@@ -50,6 +50,7 @@ struct PagePager: UIViewControllerRepresentable {
             let target = requestedIndex
             let direction: UIPageViewController.NavigationDirection = target > visibleIndex ? .forward : .reverse
             transitioning = true
+            controller.view.endEditing(true)
             controller.setViewControllers([pages[target]], direction: direction,
                                           animated: !reduceMotion && controller.view.window != nil) { [weak self, weak controller] _ in
                 guard let self = self, let controller = controller else { return }
@@ -75,6 +76,7 @@ struct PagePager: UIViewControllerRepresentable {
         func pageViewController(_ pageViewController: UIPageViewController,
                                 willTransitionTo pendingViewControllers: [UIViewController]) {
             transitioning = true
+            pageViewController.view.endEditing(true)
             swipeStartRequest = requestedIndex
         }
 
