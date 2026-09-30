@@ -10,14 +10,24 @@ struct VaultRun {
 final class VaultFiles {
     let root: URL
     private let fm = FileManager.default
+    private var enumeratedURLs: [String: URL] = [:]
 
-    init(root: URL) { self.root = root.standardizedFileURL }
+    // Retain the picker/bookmark URL, including the file provider's URL metadata.
+    init(root: URL) { self.root = root }
+
+    static func relativePath(of file: URL, depth: Int, category: Category) throws -> String {
+        let components = file.pathComponents
+        guard depth > 0, depth < components.count else {
+            throw VaultError.invalid("파일의 보관함 내 위치를 확인하지 못했습니다.")
+        }
+        return category.dbFolder + "/" + components.suffix(depth).joined(separator: "/")
+    }
 
     private func url(_ path: String) throws -> URL {
         guard !path.hasPrefix("/"), !path.split(separator: "/").contains(".."), !path.isEmpty else {
             throw VaultError.invalid("보관함 밖의 경로에는 접근할 수 없습니다.")
         }
-        let file = root.appendingPathComponent(path)
+        let file = enumeratedURLs[path] ?? root.appendingPathComponent(path)
         let base = root.resolvingSymlinksInPath().path + "/"
         guard file.resolvingSymlinksInPath().path.hasPrefix(base) else {
             throw VaultError.invalid("\(path): 보관함 밖을 가리키는 링크입니다.")
@@ -51,6 +61,7 @@ final class VaultFiles {
 
     private func inventory() throws -> [String: Stamp] {
         var files: [String: Stamp] = [:]
+        var locations: [String: URL] = [:]
         for category in Category.allCases {
             let folder = try url(category.dbFolder)
             try coordinate(folder) { folder in
@@ -81,27 +92,41 @@ final class VaultFiles {
                     guard let modified = values.contentModificationDate, let size = values.fileSize else {
                         throw VaultError.invalid("\(file.lastPathComponent): 파일 정보를 읽지 못했습니다.")
                     }
-                    let relative = category.dbFolder + "/" + file.path.dropFirst(folder.path.count + 1)
+                    // iOS can enumerate /private/var/... for a folder opened as /var/....
+                    // Slicing by the original prefix length invents a different path.
+                    // Enumeration depth is relative to this DB regardless of URL aliases.
+                    let relative = try Self.relativePath(of: file, depth: enumerator.level, category: category)
+                    guard files[relative] == nil else {
+                        throw VaultError.invalid("\(relative): 같은 위치의 파일이 여러 번 발견됐습니다.")
+                    }
                     files[relative] = Stamp(modified: modified, size: size)
+                    locations[relative] = file
                 }
                 if let scanError { throw scanError }
             }
         }
+        enumeratedURLs = locations
         return files
     }
 
     func validateAccess() throws { _ = try inventory() }
 
     private func read(_ path: String, category: Category) throws -> VaultNote {
-        try coordinate(url(path)) { file in
-            let data = try Data(contentsOf: file)
-            guard let raw = String(data: data, encoding: .utf8) else {
-                throw VaultError.invalid("\(path): UTF-8 파일이 아닙니다.")
+        do {
+            return try coordinate(url(path)) { file in
+                let data = try Data(contentsOf: file)
+                guard let raw = String(data: data, encoding: .utf8) else {
+                    throw VaultError.invalid("\(path): UTF-8 파일이 아닙니다.")
+                }
+                let attributes = try fm.attributesOfItem(atPath: file.path)
+                guard let date = attributes[.modificationDate] as? Date else { throw VaultError.permission }
+                return try VaultNote(path: path, category: category, raw: raw,
+                                     modified: Int64(date.timeIntervalSince1970 * 1000))
             }
-            let attributes = try fm.attributesOfItem(atPath: file.path)
-            guard let date = attributes[.modificationDate] as? Date else { throw VaultError.permission }
-            return try VaultNote(path: path, category: category, raw: raw,
-                                 modified: Int64(date.timeIntervalSince1970 * 1000))
+        } catch let error as VaultError {
+            throw error
+        } catch {
+            throw VaultError.invalid("파일 읽기 실패: \(path)\n\(error.localizedDescription)")
         }
     }
 

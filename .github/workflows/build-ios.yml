@@ -132,6 +132,7 @@ jobs:
           cat > "$RUNNER_TEMP/nelnote-release.md" <<'NOTES'
           iOS 16 이상용 NEL NOTE와 도장깨기 위젯입니다.
 
+          - 보관함에 있는 파일을 없다고 표시하던 iOS 경로 처리 수정 (2.3 / 앱 빌드 6)
           - 아이폰 Obsidian 보관함과 네 작품 DB 양방향 동기화
           - 작품 추가·삭제, 제목·상태, 애니 전체 화수·책 전체 쪽수 연결
           - 메모·세부 진행량은 앱에 유지하고 Obsidian 속성·본문·노트 링크 보존

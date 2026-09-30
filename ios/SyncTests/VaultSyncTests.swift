@@ -72,6 +72,61 @@ final class VaultSyncTests: XCTestCase {
         }
     }
 
+    func testDeviceDirectoryAliasesPreserveRelativePathsAndUnicodeNames() throws {
+        // Cover iOS directory aliases and the decomposed Hangul names observed
+        // on the real device. Neither may alter a DB-relative path.
+        let name = "+틱 언니.md".decomposedStringWithCanonicalMapping
+        let bases = [
+            "/var/mobile/Containers/Data/Application/APP/Documents/note",
+            "/private/var/mobile/Containers/Data/Application/APP/Documents/note"
+        ]
+        for base in bases {
+            let file = URL(fileURLWithPath: base + "/_db_anime/" + name)
+            let path = try VaultFiles.relativePath(of: file, depth: 1, category: .anime)
+            XCTAssertEqual(Array(path.utf8), Array(("_db_anime/" + name).utf8))
+            let nested = URL(fileURLWithPath: base + "/_db_anime/시리즈 + 100%/" + name)
+            XCTAssertEqual(try VaultFiles.relativePath(of: nested, depth: 2, category: .anime),
+                           "_db_anime/시리즈 + 100%/" + name)
+        }
+        XCTAssertThrowsError(try VaultFiles.relativePath(of: root, depth: 0, category: .anime))
+    }
+
+    func testSelectedDirectoryAliasRoundTripsDecomposedAndSpecialFileNames() throws {
+        let selected = root.appendingPathComponent("선택한 보관함 + 100%")
+        try FileManager.default.createSymbolicLink(at: selected, withDestinationURL: root)
+        let names = [
+            "+틱 언니".decomposedStringWithCanonicalMapping,
+            "시리즈 + 100%/제목 # [1]".decomposedStringWithCanonicalMapping
+        ]
+        for name in names {
+            try write("_db_anime/" + name + ".md",
+                      "---\ntitle: '\(name)'\nstatus: wishlist\nepisodes: 12\ngenre: [일상, 키라라]\n---\n본문 유지\n")
+        }
+        let files = VaultFiles(root: selected)
+        var library = VaultLibrary(items: [], state: VaultState())
+        let plan = try files.prepare(items: [], state: library.state)
+        XCTAssertEqual(Set(plan.actions.map(\.path)), Set(names.map { "_db_anime/" + $0 + ".md" }))
+        let snapshot = library.state
+        library.adopt(plan)
+        let run = files.execute(plan)
+        XCTAssertNil(run.error)
+        library.accept(run, snapshot: snapshot)
+        XCTAssertEqual(library.items.count, 2)
+        for index in library.items.indices {
+            library.items[index].status = .play
+            library.items[index].fieldTimes["status"] = nowMs() + 10_000
+        }
+        let second = try files.prepare(items: library.items, state: library.state)
+        XCTAssertNil(files.execute(second).error)
+        for name in names {
+            let raw = try read("_db_anime/" + name + ".md")
+            let note = try VaultNote(path: "_db_anime/" + name + ".md", category: .anime, raw: raw, modified: 0)
+            XCTAssertEqual(note.fields.status, .play)
+            XCTAssertTrue(raw.contains("genre: [일상, 키라라]"))
+            XCTAssertTrue(raw.hasSuffix("본문 유지\n"))
+        }
+    }
+
     func testOnlyOwnedYAMLChangesAndBodyIsBytePreserved() throws {
         let raw = "\u{FEFF}---\r\ntitle: '제목: 하나' # 제목 주석\r\nstatus: watching\r\nepisodes:\r\ngenre:\r\n  - 일상\r\n  - 키라라\r\nstudio: [\"제작사 A\", \"제작사 B\"]\r\ncustom:\r\n  nested: true\r\n# 마지막 주석\r\n---\r\n# 원래 제목\r\n## note\r\n- [[Anime/notes/없는 노트|없는 노트]]\r\n본문 **그대로**\r\n"
         let id = UUID().uuidString.lowercased()
